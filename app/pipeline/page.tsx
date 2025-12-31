@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
@@ -8,17 +8,19 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
+type Stage = "PIPELINE" | "APPOINTMENT" | "PREZENTARE" | "CONTRACT" | "ONBOARDING";
+
 type Lead = {
   id: string;
   nume_prenume: string;
   telefon: string;
   organizatie: string;
   localitate: string;
-  etapa: "PIPELINE" | "APPOINTMENT" | "PREZENTARE" | "CONTRACT" | "ONBOARDING";
+  etapa: Stage;
   ranking?: number;
 };
 
-const STAGES: { value: Lead["etapa"]; label: string }[] = [
+const STAGES: { value: Stage; label: string }[] = [
   { value: "PIPELINE", label: "Pipeline" },
   { value: "APPOINTMENT", label: "Appointment" },
   { value: "PREZENTARE", label: "Prezentare" },
@@ -26,7 +28,7 @@ const STAGES: { value: Lead["etapa"]; label: string }[] = [
   { value: "ONBOARDING", label: "Onboarding" }
 ];
 
-export default function Pipeline() {
+export default function PipelinePage() {
   const [userEmail, setUserEmail] = useState<string>("");
   const [leads, setLeads] = useState<Lead[]>([]);
   const [error, setError] = useState<string>("");
@@ -36,86 +38,94 @@ export default function Pipeline() {
     telefon: "",
     organizatie: "",
     localitate: "",
-    etapa: "PIPELINE" as Lead["etapa"],
+    etapa: "PIPELINE" as Stage,
     ranking: 50
   });
 
-  async function requireAuth() {
-    const { data } = await supabase.auth.getUser();
+  const stageOptions = useMemo(() => STAGES, []);
+
+  async function getAuthedUser() {
+    const { data, error } = await supabase.auth.getUser();
+    if (error) throw error;
     const user = data?.user;
-    if (!user) {
-      window.location.href = "/login";
-      return null;
-    }
-    setUserEmail(user.email || "");
+    if (!user) throw new Error("Not authenticated");
     return user;
   }
 
-  async function loadLeads() {
+  async function loadLeadsOnce() {
     setError("");
-    const user = await requireAuth();
-    if (!user) return;
+    try {
+      const user = await getAuthedUser();
+      setUserEmail(user.email || "");
 
-    // RLS face magia: AGENT vede ale lui, MANAGER vede tot
-    const { data, error } = await supabase
-      .from("leads")
-      .select("*")
-      .order("created_at", { ascending: false });
+      const res = await supabase
+        .from("leads")
+        .select("*")
+        .order("created_at", { ascending: false });
 
-    if (error) setError(error.message);
-    setLeads((data as Lead[]) || []);
+      if (res.error) throw res.error;
+      setLeads((res.data as Lead[]) || []);
+    } catch (e: any) {
+      const msg = e?.message || "Eroare necunoscută";
+      setError(msg);
+      if (msg.includes("Not authenticated")) window.location.href = "/login";
+    }
   }
 
   useEffect(() => {
-  loadLeads();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-}, []);
+    loadLeadsOnce();
+    // IMPORTANT: fără deps => rulează o singură dată
+  }, []);
 
   async function addLead() {
     setError("");
-    const user = await requireAuth();
-    if (!user) return;
+    try {
+      const user = await getAuthedUser();
 
-    if (!form.nume_prenume || !form.telefon || !form.organizatie || !form.localitate) {
-      setError("Completează nume, telefon, organizație și localitate.");
-      return;
+      if (!form.nume_prenume || !form.telefon || !form.organizatie || !form.localitate) {
+        setError("Completează nume, telefon, organizație și localitate.");
+        return;
+      }
+
+      const res = await supabase.from("leads").insert({
+        nume_prenume: form.nume_prenume,
+        telefon: form.telefon,
+        organizatie: form.organizatie,
+        localitate: form.localitate,
+        etapa: form.etapa,
+        ranking: form.ranking,
+        owner_id: user.id
+      });
+
+      if (res.error) throw res.error;
+
+      setForm({
+        nume_prenume: "",
+        telefon: "",
+        organizatie: "",
+        localitate: "",
+        etapa: "PIPELINE",
+        ranking: 50
+      });
+
+      await loadLeadsOnce();
+    } catch (e: any) {
+      setError(e?.message || "Eroare la adăugare lead");
     }
-
-    const { error } = await supabase.from("leads").insert({
-      nume_prenume: form.nume_prenume,
-      telefon: form.telefon,
-      organizatie: form.organizatie,
-      localitate: form.localitate,
-      etapa: form.etapa,
-      ranking: form.ranking,
-      owner_id: user.id
-    });
-
-    if (error) {
-      setError(error.message);
-      return;
-    }
-
-    setForm({
-      nume_prenume: "",
-      telefon: "",
-      organizatie: "",
-      localitate: "",
-      etapa: "PIPELINE",
-      ranking: 50
-    });
-
-    loadLeads();
   }
 
-  async function updateStage(id: string, etapa: Lead["etapa"]) {
+  async function updateStage(id: string, etapa: Stage) {
     setError("");
-    const { error } = await supabase.from("leads").update({ etapa }).eq("id", id);
-    if (error) setError(error.message);
-    loadLeads();
+    try {
+      const res = await supabase.from("leads").update({ etapa }).eq("id", id);
+      if (res.error) throw res.error;
+      await loadLeadsOnce();
+    } catch (e: any) {
+      setError(e?.message || "Eroare la schimbare etapă");
+    }
   }
 
-  async function logout() {
+  async function doLogout() {
     await supabase.auth.signOut();
     window.location.href = "/login";
   }
@@ -126,7 +136,7 @@ export default function Pipeline() {
         <h1>Pipeline</h1>
         <div>
           <span style={{ marginRight: 12 }}>{userEmail}</span>
-          <button onClick={logout}>Logout</button>
+          <button onClick={doLogout}>Logout</button>
         </div>
       </div>
 
@@ -159,8 +169,8 @@ export default function Pipeline() {
           onChange={(e) => setForm({ ...form, ranking: Number(e.target.value) || 50 })}
           style={{ width: 140 }}
         />
-        <select value={form.etapa} onChange={(e) => setForm({ ...form, etapa: e.target.value as Lead["etapa"] })}>
-          {STAGES.map((s) => (
+        <select value={form.etapa} onChange={(e) => setForm({ ...form, etapa: e.target.value as Stage })}>
+          {stageOptions.map((s) => (
             <option key={s.value} value={s.value}>
               {s.label}
             </option>
@@ -178,8 +188,8 @@ export default function Pipeline() {
       {leads.map((l) => (
         <div key={l.id} style={{ marginBottom: 10 }}>
           <b>{l.nume_prenume}</b> — {l.organizatie} — {l.localitate} —{" "}
-          <select value={l.etapa} onChange={(e) => updateStage(l.id, e.target.value as Lead["etapa"])}>
-            {STAGES.map((s) => (
+          <select value={l.etapa} onChange={(e) => updateStage(l.id, e.target.value as Stage)}>
+            {stageOptions.map((s) => (
               <option key={s.value} value={s.value}>
                 {s.label}
               </option>
