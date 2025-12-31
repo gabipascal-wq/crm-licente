@@ -67,9 +67,9 @@ export default function Pipeline() {
   }
 
   useEffect(() => {
-    loadLeads();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  loadLeads();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, []);
 
   async function addLead() {
     setError("");
