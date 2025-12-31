@@ -27,7 +27,16 @@ export default function Pipeline() {
   }, []);
 
   async function addLead() {
-    await supabase.from("leads").insert(form);
+    const { data: auth } = await supabase.auth.getUser();
+    const user = auth?.user;
+    if (!user) return;
+
+    await supabase.from("leads").insert({
+      ...form,
+      owner_id: user.id,
+      localitate: "N/A"
+    });
+
     setForm({ nume_prenume: "", telefon: "", organizatie: "", etapa: "pipeline" });
     loadLeads();
   }
