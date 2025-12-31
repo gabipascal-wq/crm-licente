@@ -1,0 +1,92 @@
+alter table public.profiles enable row level security;
+alter table public.leads enable row level security;
+alter table public.activities enable row level security;
+alter table public.stage_history enable row level security;
+alter table public.stage_probabilities enable row level security;
+
+create or replace function public.current_role()
+returns role_type language sql stable as $$
+  select role from public.profiles
+  where id = auth.uid()
+    and is_active = true;
+$$;
+
+create policy "profiles_read_org"
+on public.profiles for select
+using (
+  id = auth.uid()
+  or public.current_role() in ('ADMIN','MANAGER')
+);
+
+create policy "leads_select"
+on public.leads for select
+using (
+  owner_id = auth.uid()
+  or public.current_role() in ('ADMIN','MANAGER')
+);
+
+create policy "leads_insert"
+on public.leads for insert
+with check (
+  public.current_role() in ('ADMIN','MANAGER','AGENT')
+  and (
+    owner_id = auth.uid()
+    or public.current_role() in ('ADMIN','MANAGER')
+  )
+);
+
+create policy "leads_update"
+on public.leads for update
+using (
+  owner_id = auth.uid()
+  or public.current_role() in ('ADMIN','MANAGER')
+);
+
+create policy "leads_delete_admin"
+on public.leads for delete
+using (public.current_role() = 'ADMIN');
+
+create policy "activities_select"
+on public.activities for select
+using (
+  exists (
+    select 1 from public.leads l
+    where l.id = lead_id
+      and (
+        l.owner_id = auth.uid()
+        or public.current_role() in ('ADMIN','MANAGER')
+      )
+  )
+);
+
+create policy "activities_insert"
+on public.activities for insert
+with check (
+  user_id = auth.uid()
+  and exists (
+    select 1 from public.leads l
+    where l.id = lead_id
+      and (
+        l.owner_id = auth.uid()
+        or public.current_role() in ('ADMIN','MANAGER')
+      )
+  )
+);
+
+create policy "stage_history_select"
+on public.stage_history for select
+using (
+  exists (
+    select 1 from public.leads l
+    where l.id = lead_id
+      and (
+        l.owner_id = auth.uid()
+        or public.current_role() in ('ADMIN','MANAGER')
+      )
+  )
+);
+
+create policy "stage_probabilities_admin"
+on public.stage_probabilities for all
+using (public.current_role() = 'ADMIN')
+with check (public.current_role() = 'ADMIN');
