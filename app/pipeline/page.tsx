@@ -10,10 +10,11 @@ const supabase = createClient(
 
 export default function Pipeline() {
   const [leads, setLeads] = useState<any[]>([]);
-  const [form, setForm] = useState({
+    const [form, setForm] = useState({
     nume_prenume: "",
     telefon: "",
     organizatie: "",
+    localitate: "",
     etapa: "pipeline"
   });
 
