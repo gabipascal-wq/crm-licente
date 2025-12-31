@@ -55,6 +55,7 @@ export default function Pipeline() {
       <input placeholder="Nume" value={form.nume_prenume} onChange={e=>setForm({...form, nume_prenume:e.target.value})}/>
       <input placeholder="Telefon" value={form.telefon} onChange={e=>setForm({...form, telefon:e.target.value})}/>
       <input placeholder="Organizatie" value={form.organizatie} onChange={e=>setForm({...form, organizatie:e.target.value})}/>
+      <input placeholder="Localitate" value={form.localitate} onChange={e=>setForm({...form, localitate:e.target.value})}/>
       <select value={form.etapa} onChange={e=>setForm({...form, etapa:e.target.value})}>
         <option value="pipeline">Pipeline</option>
         <option value="appointment">Appointment</option>
