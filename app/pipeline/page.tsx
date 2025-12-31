@@ -58,13 +58,15 @@ export default function PipelinePage() {
       const user = await getAuthedUser();
       setUserEmail(user.email || "");
 
-      const res = await supabase
-        .from("leads")
-        .select("*")
-        .order("created_at", { ascending: false });
+      const { data, error } = await supabase
+  .from("leads")
+  .insert({...})
+  .select()
+  .single()
 
-      if (res.error) throw res.error;
-      setLeads((res.data as Lead[]) || []);
+if (error) throw error
+
+setLeads(prev => [data, ...prev])
     } catch (e: any) {
       const msg = e?.message || "Eroare necunoscută";
       setError(msg);
